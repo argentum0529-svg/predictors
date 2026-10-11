@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""predictor <name> <EXCHANGE:TICKER>
+predictor <name> description
+
+The filename is the command. Copying this file to /static/predictor (with
+/static on PATH) makes `predictor` the command. This script does not do
+that copy.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+
+def _project_root() -> Path:
+    here = Path(__file__).resolve()
+    # bin/predictor, including when /static/predictor is a symlink to this file.
+    if here.parent.name == "bin" and (here.parent.parent / "predictor").is_dir():
+        return here.parent.parent
+    if (here.parent / "predictor").is_dir():
+        return here.parent
+    return here.parent.parent
+
+
+def _usage(prog: str) -> str:
+    return f"usage: {prog} <name> <EXCHANGE:TICKER>\n       {prog} <name> description\n"
+
+
+def _error(message: str) -> int:
+    json.dump({"error": message}, sys.stdout)
+    sys.stdout.write("\n")
+    return 1
+
+
+def main(argv: list[str]) -> int:
+    root = _project_root()
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    prog = Path(argv[0]).name
+    if len(argv) != 3:
+        sys.stderr.write(_usage(prog))
+        return 1
+    name, arg = argv[1], argv[2]
+    from predictor import BasePredictor
+
+    try:
+        predictor = BasePredictor.get(name)
+    except KeyError as exc:
+        return _error(str(exc))
+    if arg == "description":
+        text = predictor.description()
+        sys.stdout.write(text)
+        if not text.endswith("\n"):
+            sys.stdout.write("\n")
+        return 0
+    if ":" not in arg:
+        return _error(f"instrument must be EXCHANGE:TICKER, got {arg!r}")
+    try:
+        result = predictor.predict(arg)
+    except Exception as exc:
+        return _error(str(exc))
+    json.dump(result, sys.stdout, allow_nan=False)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))
