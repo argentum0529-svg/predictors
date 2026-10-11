@@ -19,8 +19,12 @@ def cache_root() -> Path:
     return Path(__file__).resolve().parents[1] / ".cache"
 
 
-def config_hash() -> str:
-    payload = {
+def config_hash(extra: str = "") -> str:
+    """Hash of the simulator constants; ``extra`` adds a predictor's own parameters.
+
+    Without ``extra`` the value is unchanged, so entry-table and baseline caches stay valid.
+    """
+    payload: dict = {
         "GTT_DROP": GTT_DROP,
         "STOPLOSS_DROP": STOPLOSS_DROP,
         "SLIPPAGE": SLIPPAGE,
@@ -30,6 +34,8 @@ def config_hash() -> str:
         "WARMUP_SESSIONS": WARMUP_SESSIONS,
         "MIN_TAU_CENSORED": MIN_TAU_CENSORED,
     }
+    if extra:
+        payload["extra"] = extra
     raw = json.dumps(payload, sort_keys=True).encode()
     return hashlib.sha256(raw).hexdigest()[:12]
 
@@ -58,21 +64,21 @@ def _write(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def load_predictor_result(name: str, instrument: str, last_day: str) -> dict | None:
+def load_predictor_result(name: str, instrument: str, last_day: str, extra: str = "") -> dict | None:
     """The stored ``predict`` dict when it was built for this session and these constants."""
     data = _read(_predictor_path(name, instrument))
     if data is None:
         return None
-    if data.get("last_day") != last_day or data.get("config_hash") != config_hash():
+    if data.get("last_day") != last_day or data.get("config_hash") != config_hash(extra):
         return None
     result = data.get("result")
     return result if isinstance(result, dict) else None
 
 
-def save_predictor_result(name: str, instrument: str, last_day: str, result: dict) -> None:
+def save_predictor_result(name: str, instrument: str, last_day: str, result: dict, extra: str = "") -> None:
     _write(
         _predictor_path(name, instrument),
-        {"last_day": last_day, "config_hash": config_hash(), "result": result},
+        {"last_day": last_day, "config_hash": config_hash(extra), "result": result},
     )
 
 
