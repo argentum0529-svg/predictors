@@ -12,11 +12,24 @@ from common.entries import MIN_TAU_CENSORED, WARMUP_SESSIONS, build_entries
 from common.simulator import CHECKPOINT_MIN, GTT_DROP, MIN_TRIGGER_GAP, SLIPPAGE, STOPLOSS_DROP, TICK
 
 
+# Shared cache on a host where the install tree is not writable (``/static``).
+SHARED_CACHE = Path("/var/cache/predictors")
+
+
 def cache_root() -> Path:
+    """Where entry tables and predictor JSON are stored.
+
+    ``PREDICTORS_CACHE`` wins. Otherwise the project ``.cache`` directory is
+    used when this user can write the project. A read-only install, such as
+    ``/static/predictors``, uses ``/var/cache/predictors``.
+    """
     override = os.environ.get("PREDICTORS_CACHE", "").strip()
     if override:
         return Path(override)
-    return Path(__file__).resolve().parents[1] / ".cache"
+    project = Path(__file__).resolve().parents[1]
+    if os.access(project, os.W_OK):
+        return project / ".cache"
+    return SHARED_CACHE
 
 
 def config_hash(extra: str = "") -> str:
@@ -60,8 +73,20 @@ def _read(path: Path) -> dict | None:
 
 
 def _write(path: Path, payload: dict) -> None:
+    root = cache_root().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+    # umask 027 would leave files 640 and directories 750, so the next account
+    # could not read a cache written by the first. The cache root itself is
+    # left alone: the shared directory is 1777 and must stay writable.
+    path.chmod(0o644)
+    current = path.parent.resolve()
+    while current != root and root in current.parents:
+        try:
+            current.chmod(0o755)
+        except OSError:
+            break
+        current = current.parent
 
 
 def load_predictor_result(name: str, instrument: str, last_day: str, extra: str = "") -> dict | None:

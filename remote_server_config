@@ -1,0 +1,15 @@
+# Synced by setup_remote_server. Service user static lands this tree in
+# /static/predictors/files. remote_deploy.sh links the command to /static/predict.
+service: predictors
+user: static
+
+bin/
+predictor/
+common/
+brokers/
+requirements.txt
+!.git/
+!.cache/
+!tests/
+!*.pyc
+!__pycache__/
